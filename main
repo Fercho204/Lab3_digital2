@@ -1,0 +1,125 @@
+// Laboratorio_3_Slave.c
+// Víctor Vanegas - 22839 y Fernando Palomo - 22357
+
+#define F_CPU 16000000UL  // Definición de la frecuencia del microcontrolador a 16MHz
+#include <util/delay.h>    // Librería para funciones de retardo
+#include <avr/io.h>        // Librería para manipulación de registros de E/S
+#include <stdint.h>        // Definición de tipos de datos estándar
+#include "SPI/SPI.h"       // Inclusión de la biblioteca SPI personalizada
+#include "ADC/ADC.h"       // Inclusión de la biblioteca ADC personalizada
+
+// Declaración de variables globales
+char str[10], opcion = 0, adc = 0, numero = 0;
+volatile uint8_t valorADC1 = 0, valorADC2 = 0;
+uint8_t cont = 0;
+
+// Prototipo de función
+void refreshPORT(uint8_t valor);
+
+int main(void)
+{
+    // Configuración de pines como salida en los puertos C y D
+    DDRC |= (1 << DDC2) | (1 << DDC3) | (1 << DDC4) | (1 << DDC5);
+    DDRD |= (1 << DDD2) | (1 << DDD3) | (1 << DDD4) | (1 << DDD5);
+    
+    // Inicialización de los pines configurados como salida en "0"
+    PORTC &= ~((1 << PORTC2) | (1 << PORTC3) | (1 << PORTC4) | (1 << PORTC5));
+    PORTD &= ~((1 << PORTD2) | (1 << PORTD3) | (1 << PORTD4) | (1 << PORTD5));
+    
+    // Inicialización del módulo SPI en modo esclavo
+    spiInit(SPI_SLAVE_SS, SPI_DATA_ORDER_MSB, SPI_CLOCK_IDLE_LOW, SPI_CLOCK_FIRST_EDGE);
+    
+    // Inicialización del ADC
+    ADC_init();
+    
+    // Habilitación de interrupciones SPI
+    SPCR |= (1 << SPIE);
+    
+    while (1) {
+        // Espera y lectura de un comando recibido por SPI
+        opcion = spiRead();
+        
+        if (opcion == 1) {
+            _delay_ms(100);
+            
+            // Lectura del ADC en el canal 0 y envío por SPI
+            valorADC1 = ADC_read(0);
+            spiWrite(valorADC1);
+            refreshPORT(valorADC1);
+            _delay_ms(100);
+            
+            // Lectura del ADC en el canal 1 y envío por SPI
+            valorADC2 = ADC_read(1);
+            spiWrite(valorADC2);
+            _delay_ms(100);
+            
+            // Reinicio de variables
+            valorADC1 = 0;
+            valorADC2 = 0;
+            opcion = 0;
+            
+        } else if (opcion == 2) {
+            // Reseteo de los puertos
+            refreshPORT(0);
+            spiWrite(0);
+            
+            // Recepción de un número por SPI y actualización de los puertos
+            while (cont == 0) {
+                numero = spiRead();
+                cont = numero;
+                refreshPORT(cont);
+            }
+            
+            spiWrite(0);
+            opcion = 0;
+            cont = 0;
+        } else {
+            // Si la opción no es válida, se reinicia la variable
+            opcion = 0;
+        }
+    }
+}
+
+// Función para actualizar el estado de los pines en función de un valor recibido
+void refreshPORT(uint8_t valor) {
+    if (valor & 0b10000000) {
+        PORTC |= (1 << PORTC2);
+    } else {
+        PORTC &= ~(1 << PORTC2);
+    }
+    if (valor & 0b01000000) {
+        PORTC |= (1 << PORTC3);
+    } else {
+        PORTC &= ~(1 << PORTC3);
+    }
+    if (valor & 0b00100000) {
+        PORTC |= (1 << PORTC4);
+    } else {
+        PORTC &= ~(1 << PORTC4);
+    }
+    if (valor & 0b00010000) {
+        PORTC |= (1 << PORTC5);
+    } else {
+        PORTC &= ~(1 << PORTC5);
+    }
+    if (valor & 0b00001000) {
+        PORTD |= (1 << PORTD5);
+    } else {
+        PORTD &= ~(1 << PORTD5);
+    }
+    if (valor & 0b00000100) {
+        PORTD |= (1 << PORTD4);
+    } else {
+        PORTD &= ~(1 << PORTD4);
+    }
+    if (valor & 0b00000010) {
+        PORTD |= (1 << PORTD3);
+    } else {
+        PORTD &= ~(1 << PORTD3);
+    }
+    if (valor & 0b00000001) {
+        PORTD |= (1 << PORTD2);
+    } else {
+        PORTD &= ~(1 << PORTD2);
+    }
+}
